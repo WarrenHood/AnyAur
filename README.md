@@ -6,7 +6,7 @@ This is very experimental and should be used at your own risk.
 Clone the repo and make the scripts executable:
 
 ```sh
-git clone https://github.com/WarrenHood/AnyAur
+git clone git@github.com:WarrenHood/AnyAur.git
 cd AnyAur
 chmod +x anyaur anypkg
 ```
