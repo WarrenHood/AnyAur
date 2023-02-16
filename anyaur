@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+[[ $(type -t anypkg) != file ]] && echo "Please ensure that anypkg is in your PATH before running this" && exit 1
+
+install_aur_pkg() {
+    mkdir -p "$HOME/.anyaur"
+    cd "$HOME/.anyaur"
+    if [[ -d "$1" ]]; then
+        cd "$1"
+        git fetch && git pull
+    else
+        git clone "https://aur.archlinux.org/$1.git"
+    fi
+    cd "$HOME/.anyaur/$1"
+    anypkg
+}
+
+if [[ $# == 0 ]]; then
+    echo "Updated all AUR packages is not currently supported"
+else
+    for pkg in $@; do
+        install_aur_pkg "$pkg"
+    done
+fi

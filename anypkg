@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+# This is a very experimental script to attempt to somewhat mimic makepkg on any distro
+# This probably won't work very many PKGBUILDs out there
+# USE AT YOUR OWN RISK
+
+PKGBUILD_DIR=$(pwd)
+[[ $(cat /etc/os-release | grep "^NAME=") =~ NAME=\"(.*)\" ]]
+DISTRO=${BASH_REMATCH[1]}
+echo "Detected distro: $DISTRO"
+
+# Check if the current directory actually contains a PKGBUILD
+[[ ! -f PKGBUILD ]] && echo "Couldn't find a PKGBUILD file in $(pwd)... Aborting" && exit 1
+
+# TODO: Pass in some environment variables
+# Source the PKGBUILD I guess
+. ./PKGBUILD
+
+# Setup some variables we might need
+srcdir="$HOME/.anypkg/sources/$pkgname"
+pkgdir="$HOME/.anypkg/pkgs/$pkgname"
+
+# Ensure that everything looks okay
+echo "Attempting to install package: $pkgname - $pkgver"
+echo "Depends on:"
+for dependency in ${depends[@]};
+do
+    echo "    $dependency"
+done
+
+read -e -p "View PKGBUILD?(Y/n) " shouldview
+[[ $shouldview != [Nn]* ]] && less ./PKGBUILD
+
+read -e -p "Proceed with installation?(Y/n) " proceedwithbuild
+[[ $proceedwithbuild = [Nn]* ]] && exit 0
+
+_printlist() {
+   echo "$@" 
+}
+
+extractfileifpossible() {
+    if [[ $1 =~ .*\.tar\.gz ]] || [[ $1 =~ .*\.tgz ]]; then
+        tar -xzf "$1"
+    elif [[ $1 =~ .*\.bz2 ]]; then
+        tar -xjf "$1"
+    elif [[ $1 =~ .*.tar.* ]]; then
+        tar -xf "$1"
+    fi
+}
+
+getsource() {
+    if [[ $1 =~ (.*)::.* ]]; then
+        src_name=${BASH_REMATCH[1]}
+        [[ $1 =~ .*::(.*) ]]
+        src_url=${BASH_REMATCH[1]}
+    else
+        src_url=$1
+    fi
+
+    # Handle git packages
+    if [[ $src_url =~ git\+(.*) ]]; then
+        src_url=${BASH_REMATCH[1]}
+
+        # Check if there is a specific tag
+        if [[ $src_url =~ .*#tag=(.*) ]]; then
+            tag=${BASH_REMATCH[1]}
+            [[ $src_url =~ (.*)#tag=.* ]]
+            src_url=${BASH_REMATCH[1]}
+            
+            if [[ "$src_name" = "" ]]; then
+                git clone -b $tag --single-branch $src_url 
+            else
+                git clone -b $tag --single-branch $src_url $src_name
+            fi
+        else
+            if [[ "$src_name" = "" ]]; then
+                git clone $src_url
+            else
+                git clone $src_url $src_name
+            fi
+        fi
+    elif [[ $src_url =~ http ]]; then
+        # Handle raw URLs and stuff
+        if [[ "$src_name" = "" ]]; then
+            [[ $src_url =~ http.*/(.+) ]]
+            src_name=${BASH_REMATCH[1]}
+            curl -L -o "$src_name" "$src_url"
+            extractfileifpossible "$src_name"
+        else
+            curl -L -o "$src_name" "$src_url"
+            extractfileifpossible "$src_name"
+        fi
+    else
+        # Handle local files
+        if [[ "$src_name" = "" ]]; then
+            cp "$PKGBUILD_DIR/$src_url" .
+        else
+            cp "$PKGBUILD_DIR/$src_url" "./$src_name"
+        fi
+    fi
+}
+
+installpackages() {
+    echo "Attempting to install $@"
+    if [[ "$DISTRO" = "Arch Linux" ]]; then
+        sudo pacman -S $@
+    elif [[ "$DISTRO" = "Ubuntu" || $(type -t apt) == file ]]; then
+        sudo apt install $@
+    else
+        echo "Unknown distro. Please install the following with your package manager:"
+        echo $@
+    fi
+}
+
+getmakedepends() {
+    echo "Make Dependencies:"
+    echo "${makedepends[@]}"
+    read -e -p "Attempt to install make dependencies automatically?(Y/n) " doinstalldepends
+    if [[ $doinstalldepends != [Nn]* ]]; then
+       installpackages ${makedepends[@]}
+    fi
+}
+
+getdepends() {
+    echo "Dependencies:"
+    echo "${depends[@]}"
+    read -e -p "Attempt to install dependencies automatically?(Y/n) " doinstalldepends
+    if [[ $doinstalldepends != [Nn]* ]]; then
+       installpackages ${depends[@]}
+    fi
+}
+
+getoptdepends() {
+    echo "Optional Dependencies:"
+    echo "${optdepends[@]}"
+    read -e -p "Attempt to install optional dependencies automatically?(Y/n) " doinstalldepends
+    if [[ $doinstalldepends != [Nn]* ]]; then
+       installpackages ${optdepends[@]}
+    fi
+}
+
+# Get dependencies
+getmakedepends
+getdepends
+getoptdepends
+
+# Create our sources directory
+mkdir -p "$srcdir"
+
+# Go into our sources directory and grab sources
+cd "$srcdir"
+for src in ${source[@]}
+do
+    cd "$srcdir"
+    getsource $src
+done
+for src in ${source_x86_64[@]}
+do
+    cd "$srcdir"
+    getsource $src
+done
+cd "$srcdir"
+
+exec_if_exists() {
+    [[ $(type -t $1) == function ]] && $1
+}
+
+# Execute the prepare function first
+exec_if_exists prepare
+
+# Execute the build function next
+exec_if_exists build
+
+# Execute the package function next
+exec_if_exists package
+
+echo "Done. If everything went well, your built files should be at $pkgdir. You will need to manually install those built files. Feel free to copy them over to your system (note that your package manager will not be aware of these files if you manually copy them over"
+echo "If you are feeling brave, you can try running: sudo cp -r $pkgdir/* /"
