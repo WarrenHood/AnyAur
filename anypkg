@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # This is a very experimental script to attempt to somewhat mimic makepkg on any distro
-# This probably won't work very many PKGBUILDs out there
+# This probably won't work with very many PKGBUILDs out there
 # USE AT YOUR OWN RISK
 
 PKGBUILD_DIR=$(pwd)
