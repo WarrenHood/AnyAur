@@ -44,26 +44,30 @@ extractfileifpossible() {
         tar -xjf "$1"
     elif [[ $1 =~ .*.tar.* ]]; then
         tar -xf "$1"
+    elif [[ $1 =~ .*.zip ]]; then
+        unzip "$1"
     fi
 }
 
 getsource() {
-    if [[ $1 =~ (.*)::.* ]]; then
+    src_name=""
+    src_url=""
+    if [[ $1 =~ (.+)::.+ ]]; then
         src_name=${BASH_REMATCH[1]}
-        [[ $1 =~ .*::(.*) ]]
+        [[ $1 =~ .+::(.+) ]]
         src_url=${BASH_REMATCH[1]}
     else
         src_url=$1
     fi
 
     # Handle git packages
-    if [[ $src_url =~ git\+(.*) ]]; then
+    if [[ $src_url =~ git\+(.+) ]]; then
         src_url=${BASH_REMATCH[1]}
 
         # Check if there is a specific tag
-        if [[ $src_url =~ .*#tag=(.*) ]]; then
+        if [[ $src_url =~ .*#tag=(.+) ]]; then
             tag=${BASH_REMATCH[1]}
-            [[ $src_url =~ (.*)#tag=.* ]]
+            [[ $src_url =~ (.*)#tag=.+ ]]
             src_url=${BASH_REMATCH[1]}
             
             if [[ "$src_name" = "" ]]; then
@@ -71,6 +75,29 @@ getsource() {
             else
                 git clone -b $tag --single-branch $src_url $src_name
             fi
+        # Check if there is a specific commit
+        elif [[ $src_url =~ .+#commit=(.+) ]]; then
+            commit=${BASH_REMATCH[1]}
+            [[ $src_url =~ (.+)#commit=.+ ]]
+            src_url=${BASH_REMATCH[1]}
+            
+            
+            if [[ "$src_name" = "" ]]; then
+                git clone --single-branch $src_url
+                [[ $src_url =~ .+/([^/]+) ]]
+                src_name=${BASH_REMATCH[1]}
+                if [[ $src_name =~ (.+).git ]]; then
+                    src_name=${BASH_REMATCH[1]}
+                fi 
+
+                cd "$src_name"
+                git checkout $commit
+            else
+                git clone --single-branch $src_url $src_name
+                cd "$src_name"
+                git checkout $commit
+            fi
+        # Otherwise just clone it
         else
             if [[ "$src_name" = "" ]]; then
                 git clone $src_url
@@ -81,11 +108,13 @@ getsource() {
     elif [[ $src_url =~ http ]]; then
         # Handle raw URLs and stuff
         if [[ "$src_name" = "" ]]; then
-            [[ $src_url =~ http.*/(.+) ]]
+            [[ $src_url =~ http.*/([^/]+) ]]
             src_name=${BASH_REMATCH[1]}
+            echo "Downloading $src_name ($src_url) to $(pwd)"
             curl -L -o "$src_name" "$src_url"
             extractfileifpossible "$src_name"
         else
+            echo "Downloading $src_name ($src_url) to $(pwd)"
             curl -L -o "$src_name" "$src_url"
             extractfileifpossible "$src_name"
         fi
@@ -165,12 +194,15 @@ exec_if_exists() {
 }
 
 # Execute the prepare function first
+cd "$srcdir"
 exec_if_exists prepare
 
 # Execute the build function next
+cd "$srcdir"
 exec_if_exists build
 
 # Execute the package function next
+cd "$srcdir"
 exec_if_exists package
 
 echo "Done. If everything went well, your built files should be at $pkgdir. You will need to manually install those built files. Feel free to copy them over to your system (note that your package manager will not be aware of these files if you manually copy them over"
