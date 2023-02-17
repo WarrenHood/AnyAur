@@ -205,5 +205,5 @@ exec_if_exists build
 cd "$srcdir"
 exec_if_exists package
 
-echo "Done. If everything went well, your built files should be at $pkgdir. You will need to manually install those built files. Feel free to copy them over to your system (note that your package manager will not be aware of these files if you manually copy them over"
+echo "Done. If everything went well, your built files should be at $pkgdir. You will need to manually install those built files. Feel free to copy them over to your system (note that your package manager will not be aware of these files if you manually copy them over)"
 echo "If you are feeling brave, you can try running: sudo cp -r $pkgdir/* /"
